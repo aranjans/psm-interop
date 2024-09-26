@@ -18,7 +18,6 @@ from absl import flags
 from absl.testing import absltest
 import grpc
 
-from framework import xds_k8s_flags
 from framework import xds_k8s_testcase
 from framework.helpers import skips
 from framework.rpc import grpc_testing
@@ -34,52 +33,11 @@ _Lang = skips.Lang
 _EXPECTED_STATUS = grpc.StatusCode.DATA_LOSS
 
 
-class CustomLbTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
-    @classmethod
-    def setUpClass(cls):
-        """Force the java test server for languages not yet supporting
-        the `rpc-behavior` feature.
-        https://github.com/grpc/grpc/blob/master/doc/xds-test-descriptions.md#server
-        """
-        super().setUpClass()
-        client_lang = cls.lang_spec.client_lang
-
-        # gRPC Java implemented server "error-code-" rpc-behavior in v1.47.x.
-        # gRPC CPP implemented rpc-behavior in the same version, as custom_lb.
-        if client_lang in _Lang.JAVA | _Lang.CPP:
-            return
-
-        # gRPC Go implemented server "error-code-" rpc-behavior in v1.59.x,
-        # see https://github.com/grpc/grpc-go/pull/6575.
-        if client_lang == _Lang.GO and cls.lang_spec.version_gte("v1.59.x"):
-            return
-
-        # gRPC go, python and node fallback to the gRPC Java.
-        # TODO(https://github.com/grpc/grpc/issues/33134): use python server.
-        cls.server_image = xds_k8s_flags.SERVER_IMAGE_CANONICAL.value
-
-    @staticmethod
-    def is_supported(config: skips.TestConfig) -> bool:
-        if config.client_lang == _Lang.JAVA:
-            return config.version_gte("v1.47.x")
-        if config.client_lang == _Lang.CPP:
-            return config.version_gte("v1.55.x")
-        if config.client_lang == _Lang.GO:
-            return config.version_gte("v1.56.x")
-        if config.client_lang == _Lang.NODE:
-            return config.version_gte("v1.10.x")
-        return False
-
+class  CustomLbTest(xds_k8s_testcase.AppNetXdsKubernetesTestCase):
     def test_custom_lb_config(self):
         with self.subTest("0_create_health_check"):
             self.td.create_health_check()
 
-        # Configures a custom, test LB on the client to instruct the servers
-        # to always respond with a specific error code.
-        #
-        # The first policy in the list is a non-existent one to verify that
-        # the gRPC client can gracefully move down the list to the valid one
-        # once it determines the first one is not available.
         with self.subTest("1_create_backend_service"):
             self.td.create_backend_service(
                 locality_lb_policies=[
@@ -101,23 +59,26 @@ class CustomLbTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
                 ]
             )
 
-        with self.subTest("2_create_url_map"):
-            self.td.create_url_map(self.server_xds_host, self.server_xds_port)
+        with self.subTest("2_create_mesh"):
+            self.td.create_mesh()
 
-        with self.subTest("3_create_target_proxy"):
-            self.td.create_target_proxy()
+        with self.subTest("3_create_grpc_route"):
+            self.td.create_grpc_route(
+                self.server_xds_host, self.server_xds_port
+            )
 
-        with self.subTest("4_create_forwarding_rule"):
-            self.td.create_forwarding_rule(self.server_xds_port)
+        test_server: _XdsTestServer
+        with self.subTest("4_start_test_server"):
+            test_server = self.startTestServers(replica_count=1)[0]
 
-        with self.subTest("5_start_test_server"):
-            test_server: _XdsTestServer = self.startTestServers()[0]
-
-        with self.subTest("6_add_server_backends_to_backend_service"):
+        with self.subTest("5_setup_server_backends"):
             self.setupServerBackends()
 
-        with self.subTest("7_start_test_client"):
-            test_client: _XdsTestClient = self.startTestClient(test_server)
+        test_client: _XdsTestClient
+        with self.subTest("6_start_test_client"):
+            test_client = self.startTestClient(
+                test_server, config_mesh=self.td.mesh.name
+            )
 
         with self.subTest("8_test_client_xds_config_exists"):
             self.assertXdsConfigExists(test_client)
