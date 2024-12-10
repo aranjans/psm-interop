@@ -185,6 +185,7 @@ psm::dualstack::get_tests() {
     "round_robin_test"
     "circuit_breaking_test"
     "outlier_detection_test"
+    "remove_neg_test"
   )
 }
 
@@ -317,6 +318,7 @@ psm::csm::get_tests() {
     "gamma.affinity_test"
     "gamma.affinity_session_drain_test"
     "gamma.csm_observability_test"
+    "gamma.csm_observability_test_with_injection"
     "app_net_ssa_test"
     "app_net_csm_observability_test"
   )
@@ -780,7 +782,7 @@ activate_gke_cluster() {
       GKE_CLUSTER_ZONE="us-central1-a"
       ;;
     GKE_CLUSTER_PSM_CSM)
-      GKE_CLUSTER_NAME="psm-interop-csm"
+      GKE_CLUSTER_NAME="psm-interop-csm-gateway"
       GKE_CLUSTER_REGION="us-central1"
       ;;
     GKE_CLUSTER_PSM_GAMMA)
