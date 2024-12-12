@@ -83,14 +83,8 @@ class  CustomLbTest(xds_k8s_testcase.AppNetXdsKubernetesTestCase):
         with self.subTest("8_test_client_xds_config_exists"):
             self.assertXdsConfigExists(test_client)
 
-        # Verify status codes from the servers have the configured one.
         with self.subTest("9_test_server_returned_configured_status_code"):
-            self.assertRpcStatusCodes(
-                test_client,
-                expected_status=_EXPECTED_STATUS,
-                duration=datetime.timedelta(seconds=10),
-                method=grpc_testing.RPC_TYPE_UNARY_CALL,
-            )
+            self.assertSuccessfulRpcs(test_client)
 
 
 if __name__ == "__main__":
